@@ -1,0 +1,91 @@
+Ограничения
+City
+CityID   SMALLINT    IDENTITY (1, 1) NOT NULL
+Name     NVARCHAR (50) NOT NULL
+Количество городcких населенных пунктов в России <1200
+Самое длинное название без пробелов среди населенных пунктов в России 25 букв
+
+Warehouse
+CityID          SMALLINT    NOT NULL
+WarehouseID     INT    IDENTITY (1, 1) NOT NULL
+Name            NVARCHAR (500) NOT NULL
+Description     NVARCHAR (1000) NOT NULL
+Address         NVARCHAR (1000) NOT NULL
+Phone           NVARCHAR (50) NOT NULL
+
+ProductBin
+CityID          SMALLINT    NOT NULL
+WarehouseID     INT    NOT NULL
+ProductID       INT  NOT NULL
+VendorID        INT  NOT NULL
+Bin             NVARCHAR(16)  NOT NULL
+Count           INT  >0
+(при достижении Сount = 0 запись должна удаляться)
+
+Product
+ProductID       INT    IDENTITY (1, 1) NOT NULL
+Name            NVARCHAR (500) NOT NULL
+Description     NVARCHAR (1000) 
+Age             TINYINT >1
+Size            NVARCHAR(8)
+
+Vendor
+VendorID        INT    IDENTITY (1, 1) NOT NULL
+Name            NVARCHAR (500) NOT NULL
+Description     NVARCHAR (1000) 
+Address         NVARCHAR (1000) 
+EMail           NVARCHAR (500) 
+Phone           NVARCHAR (50) NOT NULL
+
+ProductVendor
+VendorID    INT    NOT NULL
+ProductID   INT    NOT NULL
+UnitCost    Decimal(3)  >=0
+
+ProductCategory
+CategoryID    SMALLINT    NOT NULL
+ProductID     INT    NOT NULL
+
+Category
+CategoryID          SMALLINT    IDENTITY (1, 1) NOT NULL
+ParentCategoryID    SMALLINT    
+Name                NVARCHAR (500) NOT NULL
+
+Customer
+CustomerID      INT    IDENTITY (1, 1) NOT NULL
+Name            NVARCHAR (500) NOT NULL
+Address         NVARCHAR (1000) 
+EMail           NVARCHAR (500) 
+Phone           NVARCHAR (50) NOT NULL
+
+Order
+OrderID              INT    IDENTITY (1, 1) NOT NULL
+Number               VARCHAR(16)  NOT NULL
+CustomerID           INT   NOT NULL
+NeedDelivery         BOOLEAN DEFAULT 0
+DeliveryDate         DATETIME  
+DeliveryTimeInterval NVARCHAR (100)
+DeliveryCost         DECIMAL(3) >=0
+Price                DECIMAL(3) >=0
+Promocode            NVARCHAR(8)
+
+
+OrderDtl
+OrderID   INT NOT NULL
+OrderLine INT NOT NULL
+ProductID INT NOT NULL
+VendorID  INT NOT NULL
+UnitCost  DECIMAL(3) >=0
+Discount  DECIMAL(3) >=0 - должен расчитываться автоматически из UnitCost и Order.Promocode
+Price     DECIMAL(3) - должен автоматически пересчитываться UnitCost - Discount
+
+Promo
+Promocode NVARCHAR(8) NOT NULL
+Percent   Decimal(3) >=0 <=100
+
+
+
+
+
+
+

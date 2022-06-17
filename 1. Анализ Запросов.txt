@@ -1,0 +1,53 @@
+Основные запросы:
+
+найти товар по фильтрам категория, возраст, размер 
+select p.ProductID, p.ProductName from Product as p inner join ProductCategory as pc on p.ProductID = pc.ProductID and pc.CаtegoryID = @ categoryID where p.Age = @age and p.Size = @size 
+
+найти наличие товара в магазине или на складе с учетом города доставки и поставщика
+select p.Name as Product, v.Name as Vendor, pb.Count from 
+( ProductBin as pb inner join Product as p
+on pb.City = @cityID and pb.ProductID = p.ProductID and  pb.VendorID = @vendorID and  p.Name = @productname)
+inner join Vendor as v on v.VendorID = pb.VendorID
+
+найти адреса магазинов в городе по имени 
+select w.Name, w.Address from Warehouse as w where w.CityID = @city and w.Name = @warehousename
+
+найти адреса магазинов в конкретном городе в которых есть продукт 
+select w.Name as store , w.Address from ((Product as p inner join ProductBin as pb
+on p.Name = @name and pb.CityID = @cityID and pb.ProductID = p.ProductID) inner join Warehouse as w on 
+pb.CityID = w.CityID and  pb.WarehouseID = pb.CityID) where w.IsStore = 1 
+
+найти ячейки c товаром на складе
+select pb.Bin from ProductBin as pb where pb.CityId = @cityID and pb.WarehouseID = @warehouseID and pb.ProductID = p.ProductID  
+
+найти поставщика товара 
+select v.Name from Vendor as v inner join ProductVendor as pv on pv.ProductID = @productID and  v.VendorID = pv.VendorID
+
+вывести список товаров по поставщику
+select p.Name from Product as p inner join ProductVendor as pv on p.ProductID = pv.ProductID and pv.VendorID = @vendorID
+
+вывести список товаров в магазине
+select p.Name as Product, v.Name as Vendor , pv.UnitCost  from ((Product as p inner join ProductBin as pb on pb.City = @cityID and pb.WarehouseID = @warehouseID and pb.ProductID = p.ProductID) inner join ProductVendor as pv on p.ProductID = pv.ProductID)
+inner join Vendor as v on pv.VendorID = p.VendorID
+
+вывести отчет остатков на складах товаров конкретного поставщика
+select p.Name as Product, c.CityName, w.Name as Warehouse, w.IsStore, pb.Bin, pb.Count from
+ ((Product as p inner join ProductBin as pb on pb.ProductID = p.ProductID and pb.VendorID = @vendorID ) 
+inner join Warehouse as w on w.CityID = pb.CityID and w.WarehouseID = pb.WarehouseID)
+inner join City as c on c.CityID = w.CityID
+
+вывести отчет по наличию товаров в контретном магазине
+select p.Name as Product, c.CityName, w.Name as Warehouse, w.IsStore, pb.Bin, pb.Count from
+((Product as p inner join ProductBin as pb on pb.ProductID = p.ProductID and pb.CityID = @cityID and pb.WarehouseID = @WarehouseID ) inner join Warehouse as w on w.CityID = pb.CityID and w.WarehouseID = pb.WarehouseID)
+inner join City as c on c.CityID = w.CityID
+
+вывести делали заказа
+Select o.Number , od.Line, p.Name, v.Name as Vendor, od.UnitCost, od.Discount, od.Price
+from ((Order as o inner join OrderDtl as od on o.OrderID = od.OrderDtl and o.OrderID = @orderID)
+inner join Product as p on od.ProductID = p.ProductID)
+inner join Vendor as v on v.VendorID = od.VendorID
+
+вывести список заказов покупателя
+Select o.Number from Order as o where o.CustomerID = @customerID
+ 
+

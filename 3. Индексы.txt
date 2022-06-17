@@ -1,0 +1,71 @@
+Индексы
+City
+PK_City PRIMARY KEY UNIQUE CLUSTERED (CityID)
+Доп. индекса для поиску по Name как мне кажется не нужно, таблица большой не будет.
+в РФ всего насчитывается 1112 городов.
+
+Warehouse
+PK_Warehouse PRIMARY KEY UNIQUE CLUSTERED (CityID, WarehouseID)
+Из-за постоянного фильтра по городу использовала комбинированный ключ
+FK_Warehouse_City FOREIGN KEY (CityID) REFERENCES City (CityID) ON DELETE CASCADE
+Связь нужна для получения имени города магазина/склада
+
+ProductBin
+PK_ProductBin PRIMARY KEY UNIQUE CLUSTERED (CityID, WarehouseID, ProductID, VendorID)
+FK_ProductBin_Warehouse FOREIGN KEY (CityID, WarehouseID) REFERENCES Warehouse (CityID, WarehouseID) ON DELETE CASCADE
+Связь нужна для получения данных магазина/склада
+FK_ProductBin_ProductVendor FOREIGN KEY (ProductID, VendorID) REFERENCES ProductVendor (ProductID, VendorID) ON DELETE CASCADE
+Связь нужна для получения данных о товаре определенного поставщика
+
+Product
+PK_Product PRIMARY KEY UNIQUE CLUSTERED (ProductID)
+
+Vendor
+PK_Product PRIMARY KEY UNIQUE CLUSTERED (VendorID)
+
+ProductVendor
+PK_ProductVendor PRIMARY KEY UNIQUE CLUSTERED (VendorID, ProductID)
+FK_ProductVendor_Vendor FOREIGN KEY (VendorID) REFERENCES City (VendorID) ON DELETE CASCADE
+Связь нужна для получения списка товаров для поставщика
+FK_ProductVendor_Product FOREIGN KEY (ProductID) REFERENCES Product (ProductID) ON DELETE CASCADE
+Связь нужна для поиска информации о поставщиках для товара
+
+ProductCategory
+PK_ProductCategory PRIMARY KEY UNIQUE CLUSTERED (CategoryID, ProductID)
+FK_ProductCategory_Product FOREIGN KEY (ProductID) REFERENCES Product (ProductID) ON DELETE SET DEFAULT
+Связь нужна для поиска товаров по категориям. 
+При удалении категории хорошо бы привязать данный товар к родительской категории. 
+А возможно лучше сразу прописывать все связи в таблице, тогда можно будет использовать каскадное удаление.
+
+Category
+PK_Category PRIMARY KEY UNIQUE CLUSTERED (CategoryID)
+FK_Category_Category FOREIGN KEY (ParentCategoryID) REFERENCES Category (CategoryID) ON DELETE No Action
+На удаление нужен триггер по переопределению связей с Product и child records from Category
+
+Customer
+PK_Customer PRIMARY KEY UNIQUE CLUSTERED (CustomerID)
+
+Order
+PK_Order PRIMARY KEY UNIQUE CLUSTERED (OrderID)
+FK_Order_Customer FOREIGN KEY (CustomerID) REFERENCES Product (CustomerID) ON DELETE CASCADE
+Связь нужна для отображения списка заказов покупателя.
+Система не должна позволять удалять покупателей, если есть оформленные им заказы (тем более уже оплаченные) 
+FK_Order_Promo FOREIGN KEY (Promocode) REFERENCES Promo (Promocode) ON DELETE CASCADE
+Связь нужна для вычисления цены товара
+
+OrderDtl
+PK_OrderDtl PRIMARY KEY UNIQUE CLUSTERED (OrderID, OrderLine)
+Нумерация OrderLine должна быть своя для каждого заказа от 1 и далее по порядку.
+Возможно чтобы не пересчитывать индекс при удалении какой линии, нужно другое поле для PK, а OrderLine пересчитывать, но не будет ли это дублированием информации.
+FK_OrderDtl_Order FOREIGN KEY (OrderID) REFERENCES Product (OrderID) ON DELETE NO Action
+Связь нужна для подтягивания общих данных ззаказа
+FK_OrderDtl_Product FOREIGN KEY (ProductID) REFERENCES Product (ProductID) ON DELETE NO Action
+Связь нужна для подтягивания информации о продукте при отображении заказа. При удалении продукта, информация в заказе должна остаться.
+Возможно нужно не разрешать удалять запись о продукте из таблицы Product, а лишь помечать флагом ,что такого продукта больше нет  
+FK_OrderDtl_ProductVendor FOREIGN KEY (ProductID, VendorID) REFERENCES ProductVendor (ProductID, VendorID) ON DELETE NO Action
+Связь нужна для подтягивания информации о цене продукта от конкретного поставщика
+Но возможно ее лучше не создавать.
+Цена считывается из таблички ProductVendor только до момента оформления заказа, далее она фиксируется .
+
+Promo
+PK_Promo PRIMATY KEY UNIQUE (Promocode)

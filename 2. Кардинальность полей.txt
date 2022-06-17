@@ -1,0 +1,40 @@
+Кардинальность необходимых полей
+
+City.CityID - высокая
+City.Name - высокая
+
+Warehouse.CityID - нормальная
+Warehouse.WarehouseID - высокая
+Warehouse.IsStore - низкая
+
+ProductBin.CityID - нормальная
+ProductBin.WarehouseID - нормальная
+ProductBin.ProductID - высокая
+ProductBin.VendorID - нормальная
+
+Category.CategoryID - высокая
+Category.ParentCategoryID - низкая
+Category.Name - высокая
+
+Product.ProductID - высокая
+Product.Name - высокая
+Product.CategoryID - низкая
+Product.Age - низкая
+Product.Size - низкая
+
+ProductVendor.VendorID - нормальная
+ProductVendor.ProductID - высокая
+
+Vendor.VendorID - высокая
+Vendor.Name - высокая
+
+Customer.CustomerID - высокая
+
+Order.OrderID - высокая
+Order.CustomerID - нормальная
+
+OrderDlt.OrderID - высокая
+OrderDlt.VendorID - нормальная
+OrderDlt.ProductID - нормальная
+
+Promo.Promocode - высокая 
