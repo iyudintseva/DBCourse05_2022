@@ -1,0 +1,85 @@
+---ИНДЕКС НА ПОЛЕ С ФУНКЦИЕЙ -----
+
+Интересен запрос , который отвечает за стандартную задачу
+поиск клиента по названию, которое может быть либо логином, 
+либо e-mail, либо телефоном.
+
+Возникла проблема: не разобралась пока как создать запрос с использование константы.
+
+Вариант который я нашла - это весь запрос запихнуть в функцию с параметром:
+CREATE FUNCTION CustomerSearch(IN val varchar) 
+RETURNS table( cust_id int, cust_name varchar)
+AS $$
+    select c.customerid, c.name 
+    from orders.customer as c
+    where lower(c.login) = lower(val) or
+          lower(c.phone) = lower(val) or
+          lower(c.email) = lower(val);
+$$ LANGUAGE SQL;
+
+select * from CustomerSearch('Вася100');
+
+А как правильно?
+
+Еще возник вопрос - если в запросе используется функция, то у меня explain analyze не делает разбор внутреннего кода.
+Это так и ожидается?
+
+
+-- результат анализа внутреннего запроса без индексов
+explain analyze select c.customerid, c.name 
+    from orders.customer as c
+    where lower(c.login) = 'Вася110' or
+          lower(c.phone) = 'Вася110' or
+          lower(c.email) = 'Вася110';
+
+"QUERY PLAN"
+"Gather  (cost=1000.00..8503.83 rows=2985 width=18) (actual time=85.047..86.994 rows=0 loops=1)"
+"  Workers Planned: 2"
+"  Workers Launched: 2"
+"  ->  Parallel Seq Scan on customer c  (cost=0.00..7205.33 rows=1244 width=18) (actual time=83.071..83.072 rows=0 loops=3)"
+"        Filter: ((lower((login)::text) = 'Вася110'::text) OR (lower((phone)::text) = 'Вася110'::text) OR (lower((email)::text) = 'Вася110'::text))"
+"        Rows Removed by Filter: 66667"
+"Planning Time: 0.060 ms"
+"Execution Time: 87.021 ms"
+
+-- добавила индексы по каждому из полей
+create index idx_customer_login 
+on orders.customer(lower(login));
+
+create index idx_customer_phone 
+on orders.customer(lower(phone));
+
+create index idx_customer_email 
+on orders.customer(lower(email));
+
+-- результат запроса теперь
+explain analyze select c.customerid, c.name 
+    from orders.customer as c
+    where lower(c.login) = 'Вася120' or
+          lower(c.phone) = 'Вася120' or
+          lower(c.email) = 'Вася120';
+
+"QUERY PLAN"
+"Bitmap Heap Scan on customer c  (cost=78.00..4749.79 rows=2985 width=18) (actual time=0.058..0.059 rows=0 loops=1)"
+"  Recheck Cond: ((lower((login)::text) = 'Вася120'::text) OR (lower((phone)::text) = 'Вася120'::text) OR (lower((email)::text) = 'Вася120'::text))"
+"  ->  BitmapOr  (cost=78.00..78.00 rows=3000 width=0) (actual time=0.056..0.057 rows=0 loops=1)"
+"        ->  Bitmap Index Scan on idx_customer_login  (cost=0.00..23.92 rows=1000 width=0) (actual time=0.026..0.026 rows=0 loops=1)"
+"              Index Cond: (lower((login)::text) = 'Вася120'::text)"
+"        ->  Bitmap Index Scan on idx_customer_phone  (cost=0.00..23.92 rows=1000 width=0) (actual time=0.016..0.016 rows=0 loops=1)"
+"              Index Cond: (lower((phone)::text) = 'Вася120'::text)"
+"        ->  Bitmap Index Scan on idx_customer_email  (cost=0.00..27.92 rows=1000 width=0) (actual time=0.014..0.014 rows=0 loops=1)"
+"              Index Cond: (lower((email)::text) = 'Вася120'::text)"
+"Planning Time: 0.278 ms"
+"Execution Time: 0.078 ms"
+
+Время поиска существенно меньше.
+В конкретном примере, так как значения в этих полях уникальные,то
+тоздание 3-х индексов в целом оправдано.
+
+Но возможно есть какой то паттерн для подобных задач?
+
+Подскажите, пожалуйста.
+
+
+
+                        

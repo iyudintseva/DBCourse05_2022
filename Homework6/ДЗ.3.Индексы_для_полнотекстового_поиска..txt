@@ -1,0 +1,56 @@
+--полнотекстовый поиск
+Проверяла поиск продуктов с определенной характеристикой описанной в description
+
+explain analyze select productid, name, description
+from logistic.product
+where to_tsvector(description)@@to_tsquery('Хлопок'); 
+
+"Gather  (cost=1000.00..62663.90 rows=1000 width=16) (actual time=0.205..204.389 rows=5 loops=1)"
+"  Workers Planned: 1"
+"  Workers Launched: 1"
+"  ->  Parallel Seq Scan on product  (cost=0.00..61563.90 rows=588 width=16) (actual time=100.085..201.242 rows=2 loops=2)"
+"        Filter: (to_tsvector((description)::text) @@ to_tsquery('Хлопок'::text))"
+"        Rows Removed by Filter: 99990"
+"Planning Time: 0.164 ms"
+"Execution Time: 204.417 ms"  
+
+alter table logistic.product 
+add column properties tsvector;
+
+update logistic.product
+set properties = to_tsvector(description);
+
+"Gather  (cost=1000.00..35022.19 rows=1000 width=16) (actual time=0.679..152.268 rows=5 loops=1)"
+"  Workers Planned: 1"
+"  Workers Launched: 1"
+"  ->  Parallel Seq Scan on product  (cost=0.00..33922.19 rows=588 width=16) (actual time=74.022..149.067 rows=2 loops=2)"
+"        Filter: (properties @@ to_tsquery('Хлопок'::text))"
+"        Rows Removed by Filter: 99990"
+"Planning Time: 0.169 ms"
+"Execution Time: 152.288 ms"
+
+CREATE INDEX idx_gin_productproperties 
+ON logistic.product 
+USING gin (properties);
+
+"Bitmap Heap Scan on product  (cost=24.00..2353.10 rows=1000 width=16) (actual time=0.018..0.020 rows=5 loops=1)"
+"  Recheck Cond: (properties @@ to_tsquery('Хлопок'::text))"
+"  Heap Blocks: exact=1"
+"  ->  Bitmap Index Scan on idx_gin_productproperties  (cost=0.00..23.75 rows=1000 width=0) (actual time=0.014..0.014 rows=5 loops=1)"
+"        Index Cond: (properties @@ to_tsquery('Хлопок'::text))"
+"Planning Time: 0.223 ms"
+"Execution Time: 0.034 ms"
+
+Время поиска существенно сократилось.
+
+Проблема:
+как удалить созданный индекс запросом?
+drop INDEX idx_gin_productproperties;
+возвращает 
+ERROR:  index "idx_gin_productproperties" does not exist
+SQL state: 42704
+
+Хотя используя контекстное меню в pgAdmin4 индекс удаляется без ошибок.
+
+
+                        

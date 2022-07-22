@@ -1,0 +1,69 @@
+----- ИНДЕКС НА ЧАСТЬ ТАБЛИЦЫ ----
+
+Запрос на поиск продукта c параметром Age = 4 
+( именно таких записей у меня мало в таблице)
+В целом это надуманный запрос, чтобы проверить работу.
+ 
+explain analyze select productid, name, description, age
+from logistic.product
+where age = 4;
+ 
+--анализ
+"Seq Scan on product  
+(cost=0.00..5541.83 rows=100080 width=18) 
+(actual time=0.463..21.600 rows=100001 loops=1)"
+"  Filter: (age = 4)"
+"  Rows Removed by Filter: 99985"
+"Planning Time: 0.070 ms"
+"Execution Time: 24.743 ms"
+
+-- добавляем индекс на поле по всем значениям
+create index idx_product_age_all on logistic.product(age);
+ 
+-- результат анализа
+"Index Scan using idx_product_age_all on product  
+(cost=0.29..3621.70 rows=100080 width=18) (actual time=0.038..14.760 rows=100001 loops=1)"
+"  Index Cond: (age = 4)"
+"Planning Time: 0.313 ms"
+"Execution Time: 17.488 ms"
+
+-- добавляем индекс на часть значений
+create index idx_product_age_4 on logistic.product(age)
+where age = 4;
+
+-- результат 
+"Index Scan using idxproductage4 on product  
+(cost=0.29..3391.81 rows=100726 width=18) (actual time=0.036..14.080 rows=100001 loops=1)"
+"Planning Time: 0.317 ms"
+"Execution Time: 16.612 ms"
+
+Время поиска при использовании частичного индекса уменьшилось по сравнению с использованием индекса на все значения, 
+но не сильно, возможно потому что поиск по smallint.
+Размер данных индекса тоже уменьшился.
+
+Проблема: 
+Запрос из лекции тоже не находит нужного индекса по имени
+select pg_size_pretty(pg_table_size('idx_product_age_4'));
+
+Поэтому размер индекса смотрела по следующему запросу , удаляя лишние индексы в pgAdmin4:
+SELECT
+        pg_table_size(TABLEOID) AS table_size,
+        pg_indexes_size(TABLEOID) AS indexes_size        
+	pg_total_relation_size(TABLEOID) AS total_size
+FROM 
+(SELECT 'logistic.product'::regclass::oid AS TABLEOID) AS TABLEInfo;        
+
+--- в начале
+table_size |indexes_size |total_size
+24961024   |9003008	 |33964032
+
+--- при создании индекса idx_product_age_4
+table_size |indexes_size |total_size
+24961024   |9715712	 |34676736
+
+--- idx_product_age_all
+table_size |indexes_size |total_size
+24961024   |10403840	 |35364864
+
+
+                        

@@ -1,0 +1,191 @@
+---ИНДЕКС НА НЕСКОЛЬКО ПОЛЕЙ -----
+
+В рамках этого задания хотела разобраться есть ли смысл 
+в много составном PRIMARY KEY для таблицы ProductBin
+или все же стоит вернуться к нормализации базы.
+
+Рассматривала запрос:
+"найти наличие товара в магазине с учетом конкретного города и поставщика"
+
+Записей в таблице ProductBin ~ 100000;
+
+-- ВАРИАНТ I--
+Согласно текущей схеме:  
+City(PK CityID) -> Warehouse (PK WarehouseID, FK CityID) ->
+ProdicBin (PK CityID, WarehouseID, VendorID, ProductID, Bin)
+
+explain analyze Select c.Name as City, w.Name as Store, pb.Bin,
+       p.Name as Product, v.Name as Vendor, pb.Count 
+from 
+  ((((logistic.ProductBin as pb 
+    inner join logistic.City as c
+    on pb.CityID = @cityID and 
+       pb.ProductID = @productID and
+       pb.VendorID = @vendorID and
+       pb.CityID = c.CityID)
+    inner join logistic.Warehouse as w
+    on pb.WarehouseID = w.WarehouseID)
+    inner join logistic.Product as p
+    on pb.ProductID = p.ProductID)
+    inner join logistic.Vendor as v 
+    on v.VendorID = pb.VendorID) 
+where pb.count > 0 and w.IsStore = true;
+
+Результат explain analyze:
+Если возвращаемая запись 1 из 100000, то ключ productbin_pkey подхватывается и выполение быстрое.
+"QUERY PLAN"
+"Nested Loop  (cost=1.26..596.03 rows=1 width=142) (actual time=0.036..0.214 rows=1 loops=1)"
+"  ->  Nested Loop  (cost=0.84..587.59 rows=1 width=140) (actual time=0.030..0.207 rows=1 loops=1)"
+"        ->  Nested Loop  (cost=0.42..579.14 rows=1 width=138) (actual time=0.023..0.200 rows=1 loops=1)"
+"              ->  Nested Loop  (cost=0.42..578.10 rows=1 width=24) (actual time=0.020..0.196 rows=1 loops=1)"
+"                    ->  Seq Scan on warehouse w  (cost=0.00..1.80 rows=71 width=7) (actual time=0.008..0.015 rows=71 loops=1)"
+"                          Filter: isstore"
+"                          Rows Removed by Filter: 9"
+"                    ->  Index Scan using productbin_pkey on productbin pb  (cost=0.42..8.11 rows=1 width=25) (actual time=0.002..0.002 rows=0 loops=71)"
+"                          Index Cond: ((cityid = 1) AND (warehouseid = w.warehouseid) AND (vendorid = 3) AND (productid = 3))"
+"                          Filter: (count > 0)"
+"              ->  Seq Scan on city c  (cost=0.00..1.02 rows=1 width=122) (actual time=0.003..0.003 rows=1 loops=1)"
+"                    Filter: (cityid = 1)"
+"                    Rows Removed by Filter: 1"
+"        ->  Index Scan using product_pkey on product p  (cost=0.42..8.44 rows=1 width=10) (actual time=0.006..0.006 rows=1 loops=1)"
+"              Index Cond: (productid = 3)"
+"  ->  Index Scan using vendor_pkey on vendor v  (cost=0.42..8.44 rows=1 width=10) (actual time=0.005..0.006 rows=1 loops=1)"
+"        Index Cond: (vendorid = 3)"
+"Planning Time: 0.711 ms"
+"Execution Time: 0.244 ms"
+
+Если возвращаемые записи 4000 из 100000, то ключ productbin_pkey тоже подхватывается.
+"QUERY PLAN"
+"Nested Loop  (cost=1.26..719.15 rows=122 width=142) (actual time=0.091..2.236 rows=2800 loops=1)"
+"  ->  Seq Scan on city c  (cost=0.00..1.02 rows=1 width=122) (actual time=0.023..0.025 rows=1 loops=1)"
+"        Filter: (cityid = 1)"
+"        Rows Removed by Filter: 1"
+"  ->  Nested Loop  (cost=1.26..716.91 rows=122 width=28) (actual time=0.066..1.934 rows=2800 loops=1)"
+"        ->  Nested Loop  (cost=0.84..16.89 rows=1 width=20) (actual time=0.036..0.039 rows=1 loops=1)"
+"              ->  Index Scan using product_pkey on product p  (cost=0.42..8.44 rows=1 width=10) (actual time=0.023..0.024 rows=1 loops=1)"
+"                    Index Cond: (productid = 4005)"
+"              ->  Index Scan using vendor_pkey on vendor v  (cost=0.42..8.44 rows=1 width=10) (actual time=0.012..0.013 rows=1 loops=1)"
+"                    Index Cond: (vendorid = 4005)"
+"        ->  Nested Loop  (cost=0.42..698.80 rows=122 width=24) (actual time=0.029..1.619 rows=2800 loops=1)"
+"              ->  Seq Scan on warehouse w  (cost=0.00..1.80 rows=71 width=7) (actual time=0.008..0.019 rows=71 loops=1)"
+"                    Filter: isstore"
+"                    Rows Removed by Filter: 9"
+"              ->  Index Scan using productbin_pkey on productbin pb  (cost=0.42..9.80 rows=2 width=25) (actual time=0.004..0.018 rows=39 loops=71)"
+"                    Index Cond: ((cityid = 1) AND (warehouseid = w.warehouseid) AND (vendorid = 4005) AND (productid = 4005))"
+"                    Filter: (count > 0)"
+"Planning Time: 0.379 ms"
+"Execution Time: 2.378 ms"
+
+Размер таблицы ProductBin
+"table_size"	"indexes_size"	"total_size"
+6209536	         4210688	10420224
+
+-- II ВАРИАНТ --
+Если схему чуть нормализировать, убрав дубликаты полей и добавив таблицу WarehouseBin:
+
+City(PK CityID) -> Warehouse (PK WarehouseID + FK CityID) ->
+WarehouseBin(PK BinID + Индекс (WarehouseID)) -> 
+ProductBin (PK ProductID, VendorID, BinID)
+
+то:
+
+explain analyze Select c.Name as City, w.Name as Store, wb.Bin,  
+       p.Name as Product, v.Name as Vendor, pb.Count 
+from 
+(((((logistic.City as c
+ inner join logistic.Warehouse as w
+ on w.CityID = c.CityID and c.CityID = @cityID and w.IsStrore = true)
+ inner join logistic.WarehouseBin as wb 
+ on wb.WarehouseID = w.WarehouseID) 
+ inner join logistic.ProductBin as pb 
+ on pb.ProductID = @productID and
+    pb.VendorID = @vendorID and
+    pb.BinID = c.BinID)
+ inner join logistic.Product as p
+ on pb.ProductID = p.ProductID)
+ inner join logistic.Vendor as v 
+ on v.VendorID = pb.VendorID) 
+where pb.count > 0;
+
+Если возвращаемая запись 1 из 100000, то подхватываются все ожидаемые индексы и выполение чуть быстрее, чем в I -м варианте.
+"QUERY PLAN"
+"Nested Loop  (cost=1.68..34.84 rows=1 width=142) (actual time=0.034..0.037 rows=1 loops=1)"
+"  ->  Nested Loop  (cost=1.26..26.39 rows=1 width=140) (actual time=0.029..0.031 rows=1 loops=1)"
+"        ->  Nested Loop  (cost=0.84..17.95 rows=1 width=138) (actual time=0.023..0.025 rows=1 loops=1)"
+"              ->  Nested Loop  (cost=0.84..16.91 rows=1 width=24) (actual time=0.018..0.019 rows=1 loops=1)"
+"                    ->  Nested Loop  (cost=0.70..16.75 rows=1 width=21) (actual time=0.016..0.017 rows=1 loops=1)"
+"                          ->  Index Scan using productbin_pkey on productbin pb  (cost=0.42..8.44 rows=1 width=16) (actual time=0.012..0.013 rows=1 loops=1)"
+"                                Index Cond: ((productid = 100) AND (vendorid = 100))"
+"                                Filter: (count > 0)"
+"                          ->  Index Scan using warehousebin_pkey on warehousebin wb  (cost=0.28..8.30 rows=1 width=13) (actual time=0.002..0.002 rows=1 loops=1)"
+"                                Index Cond: (binid = pb.binid)"
+"                    ->  Index Scan using warehouse_pkey on warehouse w  (cost=0.14..0.17 rows=1 width=11) (actual time=0.002..0.002 rows=1 loops=1)"
+"                          Index Cond: (warehouseid = wb.warehouseid)"
+"                          Filter: (isstore AND (cityid = 1))"
+"              ->  Seq Scan on city c  (cost=0.00..1.02 rows=1 width=122) (actual time=0.005..0.005 rows=1 loops=1)"
+"                    Filter: (cityid = 1)"
+"                    Rows Removed by Filter: 1"
+"        ->  Index Scan using product_pkey on product p  (cost=0.42..8.44 rows=1 width=10) (actual time=0.005..0.006 rows=1 loops=1)"
+"              Index Cond: (productid = 100)"
+"  ->  Index Scan using vendor_pkey on vendor v  (cost=0.42..8.44 rows=1 width=10) (actual time=0.005..0.006 rows=1 loops=1)"
+"        Index Cond: (vendorid = 100)"
+"Planning Time: 0.382 ms"
+"Execution Time: 0.065 ms"
+
+
+Если возвращаемых записей 4000 из 100000, то уже основной индекс из ProductBin не используется и выполнение в 2 раза медленнее, чем в I варианте.
+"QUERY PLAN"
+"Nested Loop  (cost=358.00..458.61 rows=80 width=142) (actual time=2.200..4.141 rows=2800 loops=1)"
+"  ->  Seq Scan on city c  (cost=0.00..1.02 rows=1 width=122) (actual time=0.006..0.008 rows=1 loops=1)"
+"        Filter: (cityid = 1)"
+"        Rows Removed by Filter: 1"
+"  ->  Nested Loop  (cost=358.00..456.78 rows=80 width=28) (actual time=2.191..3.903 rows=2800 loops=1)"
+"        ->  Nested Loop  (cost=0.84..16.89 rows=1 width=20) (actual time=0.014..0.019 rows=1 loops=1)"
+"              ->  Index Scan using product_pkey on product p  (cost=0.42..8.44 rows=1 width=10) (actual time=0.007..0.008 rows=1 loops=1)"
+"                    Index Cond: (productid = 5)"
+"              ->  Index Scan using vendor_pkey on vendor v  (cost=0.42..8.44 rows=1 width=10) (actual time=0.006..0.009 rows=1 loops=1)"
+"                    Index Cond: (vendorid = 5)"
+"        ->  Hash Join  (cost=357.16..439.10 rows=80 width=24) (actual time=2.176..3.659 rows=2800 loops=1)"
+"              Hash Cond: (wb.warehouseid = w.warehouseid)"
+"              ->  Hash Join  (cost=354.55..436.12 rows=130 width=21) (actual time=2.155..3.159 rows=4480 loops=1)"
+"                    Hash Cond: (wb.binid = pb.binid)"
+"                    ->  Seq Scan on warehousebin wb  (cost=0.00..69.80 rows=4480 width=13) (actual time=0.003..0.232 rows=4480 loops=1)"
+"                    ->  Hash  (cost=352.92..352.92 rows=130 width=16) (actual time=2.147..2.148 rows=4480 loops=1)"
+"                          Buckets: 8192 (originally 1024)  Batches: 1 (originally 1)  Memory Usage: 274kB"
+"                          ->  Bitmap Heap Scan on productbin pb  (cost=5.75..352.92 rows=130 width=16) (actual time=0.245..1.661 rows=4480 loops=1)"
+"                                Recheck Cond: ((productid = 5) AND (vendorid = 5))"
+"                                Filter: (count > 0)"
+"                                Heap Blocks: exact=824"
+"                                ->  Bitmap Index Scan on productbin_pkey  (cost=0.00..5.72 rows=130 width=0) (actual time=0.182..0.183 rows=4480 loops=1)"
+"                                      Index Cond: ((productid = 5) AND (vendorid = 5))"
+"              ->  Hash  (cost=2.00..2.00 rows=49 width=11) (actual time=0.016..0.017 rows=50 loops=1)"
+"                    Buckets: 1024  Batches: 1  Memory Usage: 11kB"
+"                    ->  Seq Scan on warehouse w  (cost=0.00..2.00 rows=49 width=11) (actual time=0.003..0.010 rows=50 loops=1)"
+"                          Filter: (isstore AND (cityid = 1))"
+"                          Rows Removed by Filter: 30"
+"Planning Time: 0.462 ms"
+"Execution Time: 4.256 ms"
+
+Размер таблиц
+"table" "table_size"	"indexes_size"	"total_size"
+WarehouseBin 
+204800	172032	376832
+ProductBin 
+4595712	3457024	8052736
+
+
+ВЫВОД:
+Честно я немного запуталась.
+
+Суммарный размер данных во II случае меньше, чем в I на больших данных.
+I  6209536 4210688 10420224
+II 4700521 3629056 8429568
+
+Поиск на больших данных показал, что в I варианте первичный ключ на таблицу ProductBin схватывается чаще, хотя я ожидала другого результата.
+А вот при поиске на небольших данных (~ 2000 записей в таблице ProductBin) II вариант у меня работал лучше.
+
+Еще II вариант сейчас мне кажется более логичным: 
+данные в WarehouseBin будут мало меняться, в то время как данные в ProductBin будут меняться постоянно.
+
+Но видимо окончательный выбор можно сделать, когда точно знаешь требования клиента.
+

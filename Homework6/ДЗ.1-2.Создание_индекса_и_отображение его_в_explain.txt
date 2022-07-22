@@ -1,0 +1,66 @@
+1-2. 
+
+-- Запрос вывода данных конкретного заказа 
+explain analyze SELECT ord.orderid, dtl.orderline ,
+p.name as product,
+v.name as vendor,
+pv.unitcost as price
+FROM (((orders.order as ord INNER JOIN
+orders.orderdtl as dtl ON
+ord.ordernumber= '9876F' AND
+ord.OrderId = dtl.orderid) INNER JOIN
+logistic.product as p ON
+p.productid = dtl.productid) LEFT JOIN
+logistic.vendor as v ON
+v.vendorid = dtl.vendorid) LEFT JOIN
+logistic.productvendor as pv ON
+pv.vendorid = dtl.vendorid and
+pv.productid = dtl.productid;
+
+-- результат
+"Nested Loop Left Join  (cost=1.68..4533.81 rows=1 width=25) (actual time=0.051..84.886 rows=10000 loops=1)"
+"  ->  Nested Loop Left Join  (cost=1.26..4533.29 rows=1 width=28) (actual time=0.043..63.049 rows=10000 loops=1)"
+"        ->  Nested Loop  (cost=0.84..4532.75 rows=1 width=22) (actual time=0.037..42.163 rows=10000 loops=1)"
+"              ->  Nested Loop  (cost=0.42..4532.24 rows=1 width=16) (actual time=0.029..20.958 rows=10000 loops=1)"
+"                    ->  Seq Scan on ""order"" ord  (cost=0.00..4523.80 rows=1 width=4) (actual time=0.013..17.012 rows=1 loops=1)"
+"                          Filter: ((ordernumber)::text = '9876F'::text)"
+"                          Rows Removed by Filter: 189983"
+"                    ->  Index Scan using pk_orderdtl on orderdtl dtl  (cost=0.42..8.44 rows=1 width=16) (actual time=0.015..2.370 rows=10000 loops=1)"
+"                          Index Cond: (orderid = ord.orderid)"
+"              ->  Index Scan using product_pkey on product p  (cost=0.42..0.50 rows=1 width=10) (actual time=0.002..0.002 rows=1 loops=10000)"
+"                    Index Cond: (productid = dtl.productid)"
+"        ->  Index Scan using vendor_pkey on vendor v  (cost=0.42..0.54 rows=1 width=10) (actual time=0.002..0.002 rows=1 loops=10000)"
+"              Index Cond: (vendorid = dtl.vendorid)"
+"  ->  Index Scan using productvendor_pkey on productvendor pv  (cost=0.42..0.52 rows=1 width=13) (actual time=0.002..0.002 rows=1 loops=10000)"
+"        Index Cond: ((vendorid = dtl.vendorid) AND (productid = dtl.productid))"
+"Planning Time: 0.785 ms"
+"Execution Time: 85.459 ms"
+
+Отработали индексы по primary keys:pk_orderdtl,product_pkey,vendor_pkey,productvendor_pkey 
+Поиск Order по имени шел без индекса  
+Seq Scan on ""order"" ord  
+(cost=0.00..4523.80 rows=1 width=4) (actual time=0.013..17.012 rows=1 loops=1)""
+
+После добавления индекса
+CREATE UNIQUE INDEX ordernumber_idx ON orders.order (ordernumber);
+
+"Nested Loop Left Join  (cost=2.10..18.45 rows=1 width=25) (actual time=0.034..47.573 rows=10000 loops=1)"
+"  ->  Nested Loop Left Join  (cost=1.68..17.93 rows=1 width=28) (actual time=0.030..31.941 rows=10000 loops=1)"
+"        ->  Nested Loop  (cost=1.26..17.39 rows=1 width=22) (actual time=0.027..17.390 rows=10000 loops=1)"
+"              ->  Nested Loop  (cost=0.84..16.88 rows=1 width=16) (actual time=0.023..2.836 rows=10000 loops=1)"
+"                    ->  Index Scan using ordernumber_idx on ""order"" ord  (cost=0.42..8.44 rows=1 width=4) (actual time=0.013..0.014 rows=1 loops=1)"
+"                          Index Cond: ((ordernumber)::text = '9876F'::text)"
+"                    ->  Index Scan using pk_orderdtl on orderdtl dtl  (cost=0.42..8.44 rows=1 width=16) (actual time=0.007..1.570 rows=10000 loops=1)"
+"                          Index Cond: (orderid = ord.orderid)"
+"              ->  Index Scan using product_pkey on product p  (cost=0.42..0.50 rows=1 width=10) (actual time=0.001..0.001 rows=1 loops=10000)"
+"                    Index Cond: (productid = dtl.productid)"
+"        ->  Index Scan using vendor_pkey on vendor v  (cost=0.42..0.54 rows=1 width=10) (actual time=0.001..0.001 rows=1 loops=10000)"
+"              Index Cond: (vendorid = dtl.vendorid)"
+"  ->  Index Scan using productvendor_pkey on productvendor pv  (cost=0.42..0.52 rows=1 width=13) (actual time=0.001..0.001 rows=1 loops=10000)"
+"        Index Cond: ((vendorid = dtl.vendorid) AND (productid = dtl.productid))"
+"Planning Time: 0.564 ms"
+"Execution Time: 47.933 ms"
+
+Индекс ordernumber_idx  подхватывается и время выполнения ускоряется.
+
+                        
